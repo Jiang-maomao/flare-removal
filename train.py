@@ -2,9 +2,8 @@ import warnings
 
 import torch.optim as optim
 from accelerate import Accelerator
-from pytorch_msssim import SSIM
 from torch.utils.data import DataLoader
-from torchmetrics import PeakSignalNoiseRatio, MeanSquaredError
+from torchmetrics.functional import peak_signal_noise_ratio, structural_similarity_index_measure
 from tqdm import tqdm
 
 from config import Config
@@ -31,8 +30,6 @@ def train():
         "dataset": opt.TRAINING.TRAIN_DIR
     }
     accelerator.init_trackers("shadow", config=config)
-    metric_psnr = PeakSignalNoiseRatio().to(device)
-    metric_rmse = MeanSquaredError(squared=False).to(device)
 
     # Data Loader
     train_dir = opt.TRAINING.TRAIN_DIR
@@ -47,7 +44,7 @@ def train():
 
     # Model & Loss
     model = Model()
-    criterion_ssim = SSIM(data_range=1, size_average=True, channel=3).to(device)
+    criterion_ssim = structural_similarity_index_measure
     criterion_psnr = torch.nn.MSELoss()
 
     # Optimizer & Scheduler
@@ -60,7 +57,7 @@ def train():
 
     start_epoch = 1
     best_epoch = 1
-    best_rmse = 100
+    best_psnr = 100
     size = len(testloader)
     # training
     for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
@@ -76,7 +73,7 @@ def train():
             res = model(inp)
 
             loss_psnr = criterion_psnr(res, tar)
-            loss_ssim = 1 - criterion_ssim(res, tar)
+            loss_ssim = 1 - criterion_ssim(res, tar, data_range=1)
 
             train_loss = loss_psnr + 0.4 * loss_ssim
 
@@ -91,7 +88,6 @@ def train():
             model.eval()
             psnr = 0
             ssim = 0
-            rmse = 0
             for idx, test_data in enumerate(tqdm(testloader)):
                 # get the inputs; data is a list of [targets, inputs, filename]
                 inp = test_data[0].contiguous()
@@ -102,31 +98,28 @@ def train():
 
                 res, tar = accelerator.gather((res, tar))
 
-                psnr += metric_psnr(res, tar)
+                psnr += peak_signal_noise_ratio(res, tar, data_range=1)
                 ssim += criterion_ssim(res, tar)
-                rmse += metric_rmse(torch.mul(res, 255), torch.mul(tar, 255))
 
             psnr /= size
             ssim /= size
-            rmse /= size
 
-            if rmse < best_rmse:
+            if psnr > best_psnr:
                 # save model
                 best_epoch = epoch
-                best_rmse = rmse
+                best_psnr = psnr
                 save_checkpoint({
                     'state_dict': model.state_dict(),
                 }, epoch, opt.MODEL.SESSION, opt.TRAINING.SAVE_DIR)
 
             accelerator.log({
                 "PSNR": psnr,
-                "SSIM": ssim,
-                "RMSE": rmse
+                "SSIM": ssim
             }, step=epoch)
 
             print(
-                "epoch: {}, PSNR: {}, SSIM: {}, RMSE: {}, best RMSE: {}, best epoch: {}"
-                .format(epoch, psnr, ssim, rmse, best_rmse, best_epoch))
+                "epoch: {}, PSNR: {}, SSIM: {}, best PSNR: {}, best epoch: {}"
+                .format(epoch, psnr, ssim, best_psnr, best_epoch))
 
     accelerator.end_training()
 

@@ -1,9 +1,8 @@
 import warnings
 
 from accelerate import Accelerator
-from pytorch_msssim import SSIM
 from torch.utils.data import DataLoader
-from torchmetrics import PeakSignalNoiseRatio, MeanSquaredError
+from torchmetrics.functional import peak_signal_noise_ratio, structural_similarity_index_measure
 from torchvision.utils import save_image
 from tqdm import tqdm
 
@@ -32,9 +31,6 @@ def test():
 
     # Model & Metrics
     model = Model()
-    ssim = SSIM(data_range=1, size_average=True, channel=3).to(device)
-    psnr = PeakSignalNoiseRatio().to(device)
-    rmse = MeanSquaredError(squared=False).to(device)
 
     load_checkpoint(model, opt.TESTING.WEIGHT)
 
@@ -45,7 +41,6 @@ def test():
     size = len(testloader)
     stat_psnr = 0
     stat_ssim = 0
-    stat_rmse = 0
     for idx, test_data in enumerate(tqdm(testloader)):
         # get the inputs; data is a list of [targets, inputs, filename]
         inp = test_data[0].contiguous()
@@ -57,15 +52,13 @@ def test():
         save_image(res, os.path.join(os.getcwd(), "result", test_data[3][0] + '_pred.png'))
         save_image(tar, os.path.join(os.getcwd(), "result", test_data[3][0] + '_gt.png'))
 
-        stat_psnr += psnr(res, tar)
-        stat_ssim += ssim(res, tar)
-        stat_rmse += rmse(torch.mul(res, 255), torch.mul(tar, 255))
+        stat_psnr += peak_signal_noise_ratio(res, tar, data_range=1)
+        stat_ssim += structural_similarity_index_measure(res, tar, data_range=1)
 
     stat_psnr /= size
     stat_ssim /= size
-    stat_rmse /= size
 
-    print("PSNR: {}, SSIM: {}, RMSE: {}".format(stat_psnr, stat_ssim, stat_rmse))
+    print("PSNR: {}, SSIM: {}".format(stat_psnr, stat_ssim))
 
 
 if __name__ == '__main__':
