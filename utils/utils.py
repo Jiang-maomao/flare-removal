@@ -17,15 +17,17 @@ def seed_everything(seed=3407):
     torch.backends.cudnn.benchmark = False
 
 
-def save_checkpoint(state, epoch, model_name, outdir):
+def save_checkpoint(state, epoch, i, model_name, psnr, outdir):
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-    checkpoint_file = os.path.join(outdir, model_name + '_' + 'epoch_' + str(epoch) + '.pth')
+    checkpoint_file = os.path.join(outdir, model_name + '_' + 'epoch_' + str(
+        epoch) + '_'+'iter_'+str(i)+'_'+'psnr_'+str(format(psnr, '.2f'))+'.pth')
     torch.save(state, checkpoint_file)
 
 
 def load_checkpoint(model, weights):
-    checkpoint = torch.load(weights, map_location=lambda storage, loc: storage.cuda(0))
+    checkpoint = torch.load(
+        weights, map_location=lambda storage, loc: storage.cuda(0))
     new_state_dict = OrderedDict()
     for key, value in checkpoint['state_dict'].items():
         if key.startswith('module'):
@@ -34,4 +36,3 @@ def load_checkpoint(model, weights):
             name = key
         new_state_dict[name] = value
     model.load_state_dict(new_state_dict)
-
