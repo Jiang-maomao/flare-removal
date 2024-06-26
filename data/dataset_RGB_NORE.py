@@ -200,15 +200,15 @@ class Flare_Image_Loader(data.Dataset):
         self.transform_base = transforms.Compose([transforms.RandomCrop((self.img_size, self.img_size), pad_if_needed=True, padding_mode='reflect'),
                                                   transforms.RandomHorizontalFlip(),
                                                   transforms.RandomVerticalFlip(),
-                                                  transforms.RandomRotation(
-                                                      180)
+                                                  transforms.RandomRotation(90)
                                                   ])
 
         self.transform_flare = transforms.Compose([transforms.RandomAffine(degrees=(0, 360), scale=(transform_flare[0], transform_flare[1]), translate=(transform_flare[2]/1440, transform_flare[2]/1440), shear=(-transform_flare[3], transform_flare[3])),
                                                    transforms.CenterCrop(
             (self.img_size, self.img_size)),
             transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip()
+            transforms.RandomVerticalFlip(),
+            transforms.RandomRotation(90)
         ])
 
         print("Base Image Loaded with examples:", len(self.data_list))
@@ -345,5 +345,5 @@ class Flare_Pair_Loader(Flare_Image_Loader):
         reflective_dict = reflective_dict
         if len(scattering_dict) != 0:
             self.load_scattering_flare('Flare7K_scattering', scattering_dict)
-        if len(reflective_dict) != 0:
-            self.load_reflective_flare('Flare7K_reflective', reflective_dict)
+        #if len(reflective_dict) != 0:
+           # self.load_reflective_flare('Flare7K_reflective', reflective_dict)

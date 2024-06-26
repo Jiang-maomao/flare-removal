@@ -1,1 +1,2 @@
-from .data_RGB import get_training_data, get_validation_data
+from .data_RGB import get_validation_data
+#from .dataset_RGB import Flare_Pair_Loader
