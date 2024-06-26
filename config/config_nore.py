@@ -13,7 +13,7 @@ r"""This module provides package-wide configuration management."""
 
 from typing import Any, List
 from yacs.config import CfgNode as CN
-class Config(object):
+class Config_nore(object):
     r"""
     A collection of all the required configuration parameters. This class is a nested dict-like
     structure, with nested keys accessible as attributes. It contains sensible default values for
@@ -60,7 +60,7 @@ class Config(object):
         self._C.VERBOSE = False
 
         self._C.MODEL = CN()
-        self._C.MODEL.SESSION = 'all_16_abnoa'
+        self._C.MODEL.SESSION = 'nore_16_3_7_97'
         self._C.MODEL.FILM = 'target'
 
         self._C.OPTIM = CN()
