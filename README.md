@@ -1,8 +1,8 @@
 # MFDNet: Multi-Frequency Deflare Network for Efficient Nighttime Flare Removal
 
-Yiguo Jiang, Xuhang Chen , Chi-Man Pun📮 , Shuqiang Wang📮, Wei Feng (📮 Corresponding Author)
+Yiguo Jiang, Xuhang Chen , Chi-Man Pun📮 , Shuqiang Wang, Wei Feng (📮 Corresponding Author)
 
-**University of Macau, SIAT CAS, Tianjin University**
+**University of Macau, SIAT CAS, Huizhou University, Tianjin University**
 
 In ***The Visual Computer***
 
