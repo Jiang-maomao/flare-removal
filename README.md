@@ -34,3 +34,8 @@ You can run the ```evaluate.py ```
 
 # 💗 Acknowledgements
 This work was supported in part by the Science and Technology Development Fund, Macau SAR, under Grants 0141/2023/RIA2 and 0193/2023/RIA3.
+
+### 🛎 Citation
+If you find our work helpful for your research, please cite:
+```bib
+```
