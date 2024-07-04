@@ -37,5 +37,6 @@ This work was supported in part by the Science and Technology Development Fund, 
 
 ### 🛎 Citation
 If you find our work helpful for your research, please cite:
-```bib
+```
+Jiang, Y., Chen, X., Pun, CM. et al. MFDNet: Multi-Frequency Deflare Network for efficient nighttime flare removal. Vis Comput (2024). https://doi.org/10.1007/s00371-024-03540-x
 ```
