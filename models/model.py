@@ -43,17 +43,22 @@ class LapPyramidConv(nn.Module):
         return x[:, :, ::2, ::2]
 
     def upsample(self, x):
-        cc = torch.cat([x, torch.zeros(x.shape[0], x.shape[1], x.shape[2], x.shape[3], device=x.device)], dim=3)
+        cc = torch.cat([x, torch.zeros(x.shape[0], x.shape[1],
+                       x.shape[2], x.shape[3], device=x.device)], dim=3)
         cc = cc.view(x.shape[0], x.shape[1], x.shape[2] * 2, x.shape[3])
         cc = cc.permute(0, 1, 3, 2)
-        cc = torch.cat([cc, torch.zeros(x.shape[0], x.shape[1], x.shape[3], x.shape[2] * 2, device=x.device)], dim=3)
+        cc = torch.cat([cc, torch.zeros(x.shape[0], x.shape[1],
+                       x.shape[3], x.shape[2] * 2, device=x.device)], dim=3)
         cc = cc.view(x.shape[0], x.shape[1], x.shape[3] * 2, x.shape[2] * 2)
         x_up = cc.permute(0, 1, 3, 2)
         return self.conv_gauss(x_up, 4 * self.kernel)
 
     def conv_gauss(self, img, kernel):
+        # 对最后两个维度进行填充，（左右上下）
         img = torch.nn.functional.pad(img, (2, 2, 2, 2), mode='reflect')
-        out = torch.nn.functional.conv2d(img, kernel.to(img.device), groups=img.shape[1])
+        # 分组卷积
+        out = torch.nn.functional.conv2d(
+            img, kernel.to(img.device), groups=img.shape[1])
         return out
 
     def pyramid_decom(self, img):
@@ -64,7 +69,8 @@ class LapPyramidConv(nn.Module):
             down = self.downsample(filtered)
             up = self.upsample(down)
             if up.shape[2] != current.shape[2] or up.shape[3] != current.shape[3]:
-                up = nn.functional.interpolate(up, size=(current.shape[2], current.shape[3]))
+                up = nn.functional.interpolate(
+                    up, size=(current.shape[2], current.shape[3]))
             diff = current - up
             pyr.append(diff)
             current = down
@@ -76,7 +82,8 @@ class LapPyramidConv(nn.Module):
         for level in reversed(pyr[:-1]):
             up = self.upsample(image)
             if up.shape[2] != level.shape[2] or up.shape[3] != level.shape[3]:
-                up = nn.functional.interpolate(up, size=(level.shape[2], level.shape[3]))
+                up = nn.functional.interpolate(
+                    up, size=(level.shape[2], level.shape[3]))
             image = up + level
         return image
 
@@ -103,43 +110,72 @@ class TransHigh(nn.Module):
                                   norm=None, nonlinear='leakyrelu')
         self.block1_2 = ConvLayer(in_channels=channels, out_channels=channels, kernel_size=3, stride=1, dilation=4,
                                   norm=None, nonlinear='leakyrelu')
-        self.aggreation1_rgb = Aggreation(in_channels=channels * 3, out_channels=channels)
+        self.aggreation1_rgb = Aggreation(
+            in_channels=channels * 3, out_channels=channels)
         # Stage2
         self.block2_1 = ConvLayer(in_channels=channels, out_channels=channels, kernel_size=3, stride=1, dilation=8,
                                   norm=None, nonlinear='leakyrelu')
         self.block2_2 = ConvLayer(in_channels=channels, out_channels=channels, kernel_size=3, stride=1, dilation=16,
                                   norm=None, nonlinear='leakyrelu')
-        self.aggreation2_rgb = Aggreation(in_channels=channels * 3, out_channels=channels)
+        self.aggreation2_rgb = Aggreation(
+            in_channels=channels * 3, out_channels=channels)
         # Stage3
         self.block3_1 = ConvLayer(in_channels=channels, out_channels=channels, kernel_size=3, stride=1, dilation=32,
                                   norm=None, nonlinear='leakyrelu')
         self.block3_2 = ConvLayer(in_channels=channels, out_channels=channels, kernel_size=3, stride=1, dilation=64,
                                   norm=None, nonlinear='leakyrelu')
-        self.aggreation3_rgb = Aggreation(in_channels=channels * 3, out_channels=channels)
+        self.aggreation3_rgb = Aggreation(
+            in_channels=channels * 3, out_channels=channels)
+        #self.block_3 = NAFNet(middle_blk_num=2, enc_blk_nums=[
+                              #1,1], dec_blk_nums=[1,1])
+        self.trans_mask_block_1 = nn.Sequential(
+            nn.Conv2d(3, 16, 1),
+            nn.LeakyReLU(),
+            nn.Conv2d(16, 3, 1))
+        self.trans_mask_block_2 = nn.Sequential(
+            nn.Conv2d(3, 16, 1),
+            nn.LeakyReLU(),
+            nn.Conv2d(16, 3, 1))
+
+        #self.trans_mask_block = NAFNet(
+           #middle_blk_num=1, enc_blk_nums=[1], dec_blk_nums=[1])
         # Stage3
-        self.spp_img = SPP(in_channels=channels, out_channels=channels, num_layers=4, interpolation_type='bicubic')
-        self.block4_1 = nn.Conv2d(in_channels=channels, out_channels=3, kernel_size=1, stride=1)
+        self.spp_img = SPP(in_channels=channels, out_channels=channels,
+                           num_layers=4, interpolation_type='bicubic')
+        self.block4_1 = nn.Conv2d(
+            in_channels=channels, out_channels=3, kernel_size=1, stride=1)
 
     def forward(self, x, pyr_original, fake_low):
         pyr_result = [fake_low]
         mask = self.model(x)
 
-        mask = nn.functional.interpolate(mask, size=(pyr_original[-2].shape[2], pyr_original[-2].shape[3]))
+        mask = nn.functional.interpolate(mask, size=(
+            pyr_original[-2].shape[2], pyr_original[-2].shape[3]))
+        mask = self.trans_mask_block_1(mask)
         result_highfreq = torch.mul(pyr_original[-2], mask) + pyr_original[-2]
+
+        #result_highfreq = self.block_3(result_highfreq)
         out1_1 = self.block1_1(result_highfreq)
         out1_2 = self.block1_2(out1_1)
-        agg1_rgb = self.aggreation1_rgb(torch.cat((result_highfreq, out1_1, out1_2), dim=1))
+        agg1_rgb = self.aggreation1_rgb(
+            torch.cat((result_highfreq, out1_1, out1_2), dim=1))
         pyr_result.append(agg1_rgb)
 
-        mask = nn.functional.interpolate(mask, size=(pyr_original[-3].shape[2], pyr_original[-3].shape[3]))
+        mask = nn.functional.interpolate(mask, size=(
+            pyr_original[-3].shape[2], pyr_original[-3].shape[3]))
+        mask = self.trans_mask_block_2(mask)
         result_highfreq = torch.mul(pyr_original[-3], mask) + pyr_original[-3]
+
+        #result_highfreq = self.block_3(result_highfreq)
         out2_1 = self.block2_1(result_highfreq)
         out2_2 = self.block2_2(out2_1)
-        agg2_rgb = self.aggreation2_rgb(torch.cat((result_highfreq, out2_1, out2_2), dim=1))
+        agg2_rgb = self.aggreation2_rgb(
+            torch.cat((result_highfreq, out2_1, out2_2), dim=1))
 
         out3_1 = self.block3_1(agg2_rgb)
         out3_2 = self.block3_2(out3_1)
-        agg3_rgb = self.aggreation3_rgb(torch.cat((agg2_rgb, out3_1, out3_2), dim=1))
+        agg3_rgb = self.aggreation3_rgb(
+            torch.cat((agg2_rgb, out3_1, out3_2), dim=1))
 
         spp_rgb = self.spp_img(agg3_rgb)
         out_rgb = self.block4_1(spp_rgb)
@@ -148,6 +184,8 @@ class TransHigh(nn.Module):
         pyr_result.reverse()
 
         return pyr_result
+
+# Layer Norm
 
 
 def to_3d(x):
@@ -215,8 +253,10 @@ class NextAttentionImplZ(nn.Module):
         self.num_dims = num_dims
         self.num_heads = num_heads
         self.q1 = nn.Conv2d(num_dims, num_dims * 3, kernel_size=1, bias=bias)
-        self.q2 = nn.Conv2d(num_dims * 3, num_dims * 3, kernel_size=3, padding=1, groups=num_dims * 3, bias=bias)
-        self.q3 = nn.Conv2d(num_dims * 3, num_dims * 3, kernel_size=3, padding=1, groups=num_dims * 3, bias=bias)
+        self.q2 = nn.Conv2d(num_dims * 3, num_dims * 3, kernel_size=3,
+                            padding=1, groups=num_dims * 3, bias=bias)
+        self.q3 = nn.Conv2d(num_dims * 3, num_dims * 3, kernel_size=3,
+                            padding=1, groups=num_dims * 3, bias=bias)
 
         self.fac = nn.Parameter(torch.ones(1))
         self.fin = nn.Conv2d(num_dims, num_dims, kernel_size=1, bias=bias)
@@ -226,7 +266,8 @@ class NextAttentionImplZ(nn.Module):
         # x: [n, c, h, w]
         n, c, h, w = x.size()
         n_heads, dim_head = self.num_heads, c // self.num_heads
-        reshape = lambda x: einops.rearrange(x, "n (nh dh) h w -> (n nh h) w dh", nh=n_heads, dh=dim_head)
+        def reshape(x): return einops.rearrange(
+            x, "n (nh dh) h w -> (n nh h) w dh", nh=n_heads, dh=dim_head)
 
         qkv = self.q3(self.q2(self.q1(x)))
         q, k, v = map(reshape, qkv.chunk(3, dim=1))
@@ -239,7 +280,8 @@ class NextAttentionImplZ(nn.Module):
         res = torch.softmax(res, dim=-1)
 
         res = torch.matmul(res, v)
-        res = einops.rearrange(res, "(n nh h) w dh -> n (nh dh) h w", nh=n_heads, dh=dim_head, n=n, h=h)
+        res = einops.rearrange(
+            res, "(n nh h) w dh -> n (nh dh) h w", nh=n_heads, dh=dim_head, n=n, h=h)
         res = self.fin(res)
 
         return res
@@ -274,12 +316,14 @@ class FeedForward(nn.Module):
 
         hidden_features = int(dim * ffn_expansion_factor)
 
-        self.project_in = nn.Conv2d(dim, hidden_features * 2, kernel_size=1, bias=bias)
+        self.project_in = nn.Conv2d(
+            dim, hidden_features * 2, kernel_size=1, bias=bias)
 
         self.dwconv = nn.Conv2d(hidden_features * 2, hidden_features * 2, kernel_size=3, stride=1, padding=1,
                                 groups=hidden_features * 2, bias=bias)
 
-        self.project_out = nn.Conv2d(hidden_features, dim, kernel_size=1, bias=bias)
+        self.project_out = nn.Conv2d(
+            hidden_features, dim, kernel_size=1, bias=bias)
 
     def forward(self, x):
         x = self.project_in(x)
@@ -311,7 +355,8 @@ class OverlapPatchEmbed(nn.Module):
     def __init__(self, in_c=3, embed_dim=48, bias=False):
         super(OverlapPatchEmbed, self).__init__()
 
-        self.proj = nn.Conv2d(in_c, embed_dim, kernel_size=3, stride=1, padding=1, bias=bias)
+        self.proj = nn.Conv2d(in_c, embed_dim, kernel_size=3,
+                              stride=1, padding=1, bias=bias)
 
     def forward(self, x):
         x = self.proj(x)
@@ -353,10 +398,12 @@ class LAM_Module_v2(nn.Module):
 
         self.temperature = nn.Parameter(torch.ones(1))
 
-        self.qkv = nn.Conv2d(self.chanel_in, self.chanel_in * 3, kernel_size=1, bias=bias)
+        self.qkv = nn.Conv2d(
+            self.chanel_in, self.chanel_in * 3, kernel_size=1, bias=bias)
         self.qkv_dwconv = nn.Conv2d(self.chanel_in * 3, self.chanel_in * 3, kernel_size=3, stride=1, padding=1,
                                     groups=self.chanel_in * 3, bias=bias)
-        self.project_out = nn.Conv2d(self.chanel_in, self.chanel_in, kernel_size=1, bias=bias)
+        self.project_out = nn.Conv2d(
+            self.chanel_in, self.chanel_in, kernel_size=1, bias=bias)
 
     def forward(self, x):
         """
@@ -400,7 +447,7 @@ class Backbone(nn.Module):
                  out_channels=3,
                  dim=3,
                  num_blocks=[1, 2, 4, 8],
-                 num_refinement_blocks=2,
+                 num_refinement_blocks=1,
                  heads=[1, 2, 4, 8],
                  ffn_expansion_factor=2.66,
                  bias=False,
@@ -424,15 +471,35 @@ class Backbone(nn.Module):
                              LayerNorm_type=LayerNorm_type) for _ in range(num_blocks[0])])
 
         self.layer_fussion = LAM_Module_v2(in_dim=int(dim * 3))
-        self.conv_fuss = nn.Conv2d(int(dim * 3), int(dim), kernel_size=1, bias=bias)
+        self.conv_fuss = nn.Conv2d(
+            int(dim * 3), int(dim), kernel_size=1, bias=bias)
 
-        self.latent = nn.Sequential(*[
+        #self.latent = nn.Sequential(*[
+            #TransformerBlock(dim=int(dim), num_heads=heads[0], ffn_expansion_factor=ffn_expansion_factor, bias=bias,
+                             #LayerNorm_type=LayerNorm_type) for _ in range(num_blocks[0])])
+
+        #self.trans_low = NAFNet()
+
+        #self.coefficient_1_0 = nn.Parameter(torch.ones(
+            #(2, int(int(dim)))), requires_grad=attention)
+        
+        self.latent_1 = nn.Sequential(*[
             TransformerBlock(dim=int(dim), num_heads=heads[0], ffn_expansion_factor=ffn_expansion_factor, bias=bias,
                              LayerNorm_type=LayerNorm_type) for _ in range(num_blocks[0])])
+        """                   
+        self.latent_2 = nn.Sequential(*[
+            TransformerBlock(dim=int(dim), num_heads=heads[0], ffn_expansion_factor=ffn_expansion_factor, bias=bias,
+                             LayerNorm_type=LayerNorm_type) for _ in range(num_blocks[0])])
+        """
+        self.trans_low_1 = NAFNet(middle_blk_num=10, enc_blk_nums=[
+                                  1,2, 4], dec_blk_nums=[4,2,1])
+        #self.trans_low_2 = NAFNet()
 
-        self.trans_low = NAFNet()
+        self.coefficient_1_0 = nn.Parameter(torch.ones(
+            (2, int(int(dim)))), requires_grad=attention)
 
-        self.coefficient_1_0 = nn.Parameter(torch.ones((2, int(int(dim)))), requires_grad=attention)
+        #self.coefficient_2_0 = nn.Parameter(torch.ones(
+            #(2, int(int(dim)))), requires_grad=attention)
 
         self.refinement_1 = nn.Sequential(*[
             TransformerBlock(dim=int(dim), num_heads=heads[0], ffn_expansion_factor=ffn_expansion_factor, bias=bias,
@@ -445,9 +512,11 @@ class Backbone(nn.Module):
                              LayerNorm_type=LayerNorm_type) for _ in range(num_refinement_blocks)])
 
         self.layer_fussion_2 = LAM_Module_v2(in_dim=int(dim * 3))
-        self.conv_fuss_2 = nn.Conv2d(int(dim * 3), int(dim), kernel_size=1, bias=bias)
+        self.conv_fuss_2 = nn.Conv2d(
+            int(dim * 3), int(dim), kernel_size=1, bias=bias)
 
-        self.output = nn.Conv2d(int(dim), out_channels, kernel_size=3, stride=1, padding=1, bias=bias)
+        self.output = nn.Conv2d(int(dim), out_channels,
+                                kernel_size=3, stride=1, padding=1, bias=bias)
 
     def forward(self, inp):
         inp_enc_encoder1 = self.patch_embed(inp)
@@ -461,18 +530,29 @@ class Backbone(nn.Module):
         out_fusion_123 = self.layer_fussion(inp_fusion_123)
         out_fusion_123 = self.conv_fuss(out_fusion_123)
 
-        out_enc = self.trans_low(out_fusion_123)
+        #out_enc = self.trans_low(out_fusion_123)
 
-        out_fusion_123 = self.latent(out_fusion_123)
+        #out_fusion_123 = self.latent(out_fusion_123)
 
-        out = self.coefficient_1_0[0, :][None, :, None, None] * out_fusion_123 + self.coefficient_1_0[1, :][None, :,
-                                                                                 None, None] * out_enc
+        #out = self.coefficient_1_0[0, :][None, :, None, None] * out_fusion_123 + self.coefficient_1_0[1, :][None, :,None, None] * out_enc
 
+        out_enc_1 = self.trans_low_1(out_fusion_123)
+
+        out_fusion_123_1 = self.latent_1(out_fusion_123)
+
+        out = self.coefficient_1_0[0, :][None, :, None, None] * out_fusion_123_1 + self.coefficient_1_0[1, :][None, :,
+                                                                                                              None, None] * out_enc_1
+        #out_enc_2 = self.trans_low_2(out)
+
+        #out_fusion_123_2 = self.latent_2(out)
+        
+        #out = self.coefficient_2_0[0, :][None, :, None, None] * out_fusion_123_2 + self.coefficient_2_0[1, :][None, :,None, None] * out_enc_2
         out_1 = self.refinement_1(out)
         out_2 = self.refinement_2(out_1)
         out_3 = self.refinement_3(out_2)
 
-        inp_fusion = torch.cat([out_1.unsqueeze(1), out_2.unsqueeze(1), out_3.unsqueeze(1)], dim=1)
+        inp_fusion = torch.cat(
+            [out_1.unsqueeze(1), out_2.unsqueeze(1), out_3.unsqueeze(1)], dim=1)
         out_fusion_123 = self.layer_fussion_2(inp_fusion)
         out = self.conv_fuss_2(out_fusion_123)
         result = self.output(out)
@@ -491,8 +571,10 @@ class Model(nn.Module):
         pyr_inp = self.lap_pyramid.pyramid_decom(img=inp)
         out_low = self.backbone(pyr_inp[-1])
 
-        inp_up = nn.functional.interpolate(pyr_inp[-1], size=(pyr_inp[-2].shape[2], pyr_inp[-2].shape[3]))
-        out_up = nn.functional.interpolate(out_low, size=(pyr_inp[-2].shape[2], pyr_inp[-2].shape[3]))
+        inp_up = nn.functional.interpolate(
+            pyr_inp[-1], size=(pyr_inp[-2].shape[2], pyr_inp[-2].shape[3]))
+        out_up = nn.functional.interpolate(out_low, size=(
+            pyr_inp[-2].shape[2], pyr_inp[-2].shape[3]))
         high_with_low = torch.cat([pyr_inp[-2], inp_up, out_up], 1)
 
         pyr_inp_trans = self.trans_high(high_with_low, pyr_inp, out_low)
