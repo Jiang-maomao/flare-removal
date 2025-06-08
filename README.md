@@ -14,7 +14,7 @@ cd flare-removal
 ```
 
 ### Training
-To train a model with your own data/model, you can edit the ```config/config.py``` and run the following codes.
+You may download the <a href="https://github.com/ykdai/Flare7K">Flare7K</a> dataset first. If you want to train a model with your own data/model, you can edit the ```config/config.py``` and run the following codes.
 
 For single GPU training:
 ```bash
@@ -28,7 +28,8 @@ accelerate launch train.py
 If you have difficulties on the usage of accelerate, please refer to <a href="https://github.com/huggingface/accelerate">Accelerate</a>.
 
 ### Inference
-You can use the ```deflare.ipynb ```
+Please run the ```deflare.ipynb ``` 
+You can use the model you trained on your dataset, or download the pre-trained models on the Flare7K dataset <a href="https://github.com/Jiang-maomao/flare-removal/releases/tag/checkpoint">here</a>.
 ### Evaluation
 You can run the ```evaluate.py ```
 
